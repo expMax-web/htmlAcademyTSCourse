@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "allowJs": true,
+    "lib": ["es2020", "dom", "dom.iterable"],
+    "rootDir": "./src/2",
+    "outDir": "./js",
+    "moduleResolution": "node",
+    "resolveJsonModule": true
+  }
+}

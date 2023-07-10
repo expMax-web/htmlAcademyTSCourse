@@ -1,0 +1,10 @@
+{
+  "name": "demo2",
+  "version": "1.0.0",
+  "description": "2. Эквивалентность типов",
+  "main": "index.html",
+  "devDependencies": {
+    "typescript": "5.1.6"
+  },
+  "keywords": []
+}
