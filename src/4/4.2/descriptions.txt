@@ -1,0 +1,87 @@
+Шаг 1. Создание подписки на событие
+Предположим, задача решена. Каким будет последнее действие нашей программы — функции привязки формы?
+
+Очевидно, это будет добавление обработчика события к нужному элементу.
+
+export const subscribe: SubscribeOverloads = (target, name, handler) => {
+  target.addEventListener(name, handler as never);
+  return ()=>target.removeEventListener(name, handler as never);
+};
+  
+В этом отрывке даже без изучения определения интерфейса SubscribeOverloads можно увидеть, что:
+
+target — это элемент на странице;
+name — имя события, которое следует обрабатывать;
+handler — собственно обработчик.
+Мы добавим определение интерфейса SubscribeOverloads для учёта перегруженных вариантов и поручим TypeScript контролировать вызов функции subscribe. Пусть TypeScript уведомит нас, если мы попытаемся использовать эту функцию в каких-то случаях, которые ещё не проверили.
+
+Описание интерфейса будет таким:
+
+interface SubscribeOverloads {
+  (target: HTMLButtonElement, name: 'click', listener: ReturnType<ListenerFactory['makeButtonClick']>): Unsubscribe;
+  (target: HTMLInputElement, name: 'click', listener: ReturnType<ListenerFactory['makeInputClick']>): Unsubscribe;
+  (target: HTMLInputElement, name: 'input', listener: ReturnType<ListenerFactory['makeInputInput']>): Unsubscribe;
+  (target: HTMLSelectElement, name: 'input', listener: ReturnType<ListenerFactory['makeSelectInput']>): Unsubscribe;
+  (target: HTMLTextAreaElement, name: 'input', listener: ReturnType<ListenerFactory['makeTextAreaInput']>): Unsubscribe;
+}   
+  
+Вы можете найти этот фрагмент в файле subscribe.ts. Мы будем использовать его на следующем этапе.
+
+Шаг 2. Дискриминаторы
+Перед вызовом subscribe из прошлого шага мы должны определить, является ли элемент одним из тех, которые мы обрабатываем.
+
+Нам потребуется несколько функций — кастомных определителей типа. Вот один из вариантов определения такой функции:
+
+export const isButton = (element: Element): element is HTMLButtonElement =>
+  element.tagName === "BUTTON";
+export const isInput = (element: Element): element is HTMLInputElement =>
+  element.tagName === "INPUT";
+export const isCheckBox = (element: HTMLInputElement): boolean =>
+  element.type === "checkbox";
+export const isSelect = (element: Element): element is HTMLSelectElement =>
+  element.tagName === "SELECT";
+export const isTextArea = (element: Element): element is HTMLTextAreaElement =>
+  element.tagName === "TEXTAREA";
+
+Вы можете посетовать, что типы HTML***Element не образуют discriminating union по значению поля tagName. Возможно, это связано с тем, что множество тегов можно дополнять. Но как бы то ни было, это так, и нам приходится придумывать дискриминаторы.
+
+Обратите внимание на то, что результат функции оформлен в виде утверждения: argument is type name. Этот предикат типа и позволяет сервисам TypeScript делать нужные выводы. В остальном функция дискриминатора типа — обычная булевая функция.
+
+Шаг 3. Использование дискриминаторов типа
+Мы добавим функцию, которая будет проверять, является ли предъявленный элемент из страницы одним из обрабатываемых. Если это так, то функция будет подписывать нужный код на нужное событие.
+
+Эта функция может выглядеть так:
+
+const attach = (target: Element, methods: ListenerFactory): Unsubscribe => {
+  if (isButton(target)) {
+    return subscribe(target, "click", methods.makeButtonClick());
+  }
+  if (isInput(target)) {
+    if (isCheckBox(target)) {
+      return subscribe(target, "click", methods.makeInputClick());
+    }
+    return subscribe(target, "input", methods.makeInputInput());
+  }
+  if (isSelect(target)) {
+    return subscribe(target, "input", methods.makeSelectInput());
+  }
+  if (isTextArea(target)) {
+    return subscribe(target, "input", methods.makeTextAreaInput());
+  }
+  throw new Error(`unexpected target type ${target.tagName}`);
+};
+
+Шаг 4. Соберём функцию редуктором
+Изготовим редуктор, задача которого — для указанного имени поля находить в документе нужный элемент и присоединять к нему обработчик события. Такой редуктор можно сделать с помощью этой фабрики.
+
+export const createReducer = (container: HTMLElement) => (
+  unSubscribers: Unsubscribe[],
+  [field, factory]: [string, ListenerFactory]
+) => [
+  ...unSubscribers,
+  ...detectBindElement(container.querySelector(`[name=${field}]`), factory)
+];
+
+В файле binder.ts мы можем воспользоваться наработками и использовать редуктор для выполнения нужной задачи.
+
+Мы вынесли создание редуктора и начального значения в отдельные модули для удобства изучения.
