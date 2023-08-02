@@ -1,0 +1,76 @@
+Шаг 1. Алгоритм создания отчёта
+Отчёт можно создать в три шага:
+
+Инициализация отчёта.
+Сбор статистики.
+Выполнение финальной обработки.
+Интерфейс роли посетителя ServiceLogVisitor
+
+export interface ServiceLogVisitor<T, R = T> {
+  getInitialState(): T;
+  visitLogRecord(state: T, record: ServiceLogRecord): T;
+  report(state: T): R;
+}
+
+Интерфейс подсказывает, что для создания отчёта следует выполнить метод getInitialState. Затем в цикле, для каждой записи журнала, нужно выполнить visitLogRecord. В завершение стоит преобразовать накопленные данные методом report.
+
+Такой подход хорошо соотносится с использованием метода Array::reduce.
+
+И в самом деле, все отчёты, которые можно изготовить по этой схеме, будут выполняться одним и тем же кодом.
+
+Диспетчер
+
+export const dispatch = <T, R>(
+  items: ServiceLogRecord[],
+  visitor: ServiceLogVisitor<T, R>
+) =>
+  visitor.report(
+    items.reduce(
+      (state, item) => visitor.visitLogRecord(state, item),
+      visitor.getInitialState()
+    )
+  );
+
+Мы выбрали такую реализацию диспетчера записей в отчёт.
+
+Шаг 2. Набор данных
+В этом шаге мы создадим простой набор данных для имитации журнала. Пусть он будет коротким, чтобы можно было своими глазами увидеть корректность работы отчётов.
+
+Загляните в файл service-log.ts и ознакомьтесь с тестовым набором данных.
+
+Шаг 3. Реализация посетителя
+В файле age-cost-correlation.ts изучите одну из возможных реализаций посетителя.
+
+При создании посетителя можно задать опорную дату, относительно которой будет вычисляться возраст автомобиля на момент обслуживания.
+
+export const createAgeCostCorrelationVisitor = (
+  reference: DateTime
+): ServiceLogVisitor<AgeCostCorrelation> => {
+  const refYear = new Date(reference).getFullYear();
+  return {
+    getInitialState: () => ({}),
+    report: (state) => state,
+    visitLogRecord: (state, item) => {
+      const { year, total } = item;
+      return year > refYear
+        ? state
+        : { ...state, ...collect(refYear - year, state, total) };
+    }
+  };
+};
+
+Функция collect добавляет к известной (накопленной) стоимости значение из текущей записи.
+
+const collect = (age: number, state: AgeCostCorrelation, total: Amount) => ({
+  [age]: makeAmount((state[age] || 0) + total)
+});
+
+Для этого отчёта нам не потребовалось никаких дополнительных преобразований после окончания работы: report возвращает то, что получила, без изменений.
+
+Шаг 4. Остальные посетители и их поведение
+Использование методики inversion of control удобно, когда нужно создать несколько отрывков кода, которые во многом похожи. Создание остальных отчётов, вероятно, не вызовет затруднений.
+
+Изучите реализации customer-outstanding.ts, service-center-totals.ts и связанные с реализацией модульные тесты.
+
+Создание отчётов
+Мы подготовили инфраструктуру для создания отчётов по списку из журнала регистрации. Эти отчёты могут быть разной формы. И при этом мы поручили TypeScript следить за типами используемых значений.
